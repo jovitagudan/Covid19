@@ -1,0 +1,12 @@
+name: Covid19
+title: Covid19
+username:
+account: jovitagudan
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 2735423
+bundleId: 3580412
+url: https://jovitagudan.shinyapps.io/Covid19/
+when: 1598974420.78169
+asMultiple: FALSE
+asStatic: FALSE
