@@ -18,31 +18,6 @@ library(gridExtra)
 library(grid)
 library(plotly)
 library(cpm)
-# shinydashboardPlusGallery()
-# 
-# ui <- fluidPage(
-#   h1("Covid Tracker"),
-#   sliderInput(inputId = "num",
-#               label= "Choose a number",
-#               value= 25, min=1,max=100),
-#   plotOutput("hist")
-#   
-# )
-# 
-# server <- function(input, output){
-#   output$hist <- renderPlot({
-#     title <- paste(input$num, "random normal values")
-#     hist(rnorm(input$num), main=title)
-#     })
-# }
-# 
-# shinyApp(ui=ui, server=server)
-
-# rsconnect::setAccountInfo(name='jovitagudan',
-#                           token='B567173B782DB3FADC6CD8ED0AFD3429',
-#                           secret='a39ncsRGu3YOfvsoFiwBTy3Z1JpVJtQ/AAPtV+io')
-# 
-# library(rsconnect)
 
 
 countries<- rownames(normalized)
