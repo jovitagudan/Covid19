@@ -1,398 +1,775 @@
 
 
 
+suppressMessages({ suppressWarnings ({ source("global.R") }) })
 
-#update data with automated script
-source("jhu_data1.R")
+load("data/smoothed_data_20211004.RData")
 
-
-
-
-library(shiny)
-library(shinydashboard)
-library(shinydashboardPlus)
-
-library(ggplot2)
-library(reshape2)
-library(gridExtra)
-library(grid)
-library(plotly)
-library(cpm)
-
-
-countries<- rownames(normalized)
-min_date <- as.Date(min(colnames(normalized)))
-current_date <- as.Date(max(colnames(normalized)))
-
-#Estimation of negative exponential model
-neg_expo_model <- function(dependent_var, start_id, end_id){
-  
-  y <- dependent_var[start_id:end_id]
-  x <- 1:length(y) 
-  theta.0 <- max(y) * 1.1
-  model.0 <- lm(log(- y + theta.0) ~ x)
-  alpha.0 <- -exp(coef(model.0)[1])
-  beta.0 <- coef(model.0)[2]
-  
-  start <- list(alpha = alpha.0, beta = beta.0, theta = theta.0)
-  
-  # Fit the model
-  model <- nls(y ~ alpha * exp(beta * x) + theta , start = start)
-  return(model)
-}
-
-
-### MAP FUNTIONS ###
-
-t <- list(
-  family = "sans serif",
-  size = 14,
-  color = toRGB("grey50"))
-
-cumulative_plot  = function(var_to_plot, text) {
-  
-  fig <- plot_ly(height = 500, width = 800) 
-  
-  fig <- fig %>% add_trace(x = colnames(var_to_plot), 
-                           y = t(var_to_plot),
-                           name = paste(text),
-                           type = 'scatter',
-                           mode = "lines+markers",
-                           line = list(
-                             color = '#7F7F7F'
-                           ),
-                           marker= list(
-                             color = '#7F7F7F'
-                           ),
-                           hovertemplate = paste('<b>',text,'</b>: %{y:.0f}',
-                                                 '<br><b>Date</b>: %{x}<br>',
-                                                 "<extra></extra>"))
-  
-  fig <- fig %>% layout(title = '',
-                        xaxis = list(title = 'Date', 
-                                     titlefont = list(size = 12),
-                                     type = 'date',
-                                     tickformat = "%Y-%m-%d"),
-                        yaxis=list(title = paste(text),
-                                   titlefont = list(size = 12)),
-                        margin = list(l = 50, r = 50, t = 60, b = 150)
-  )
-  fig
-}
-
-
-
-prediction_plot  = function(var_to_plot, text) {
-  
-  
-  vline <- function(x = 0, color = "red") {
-    list(
-      type = "line", 
-      y0 = 0, 
-      y1 = 1, 
-      yref = "paper",
-      x0 = x, 
-      x1 = x, 
-      line = list(color = color)
-    )
-  }
-  
-  
-  fig <- plot_ly(height = 500, width = 800) 
-  
-  fig <- fig %>% add_trace(x = var_to_plot$Date, 
-                           y = var_to_plot$log_data,
-                           name = paste(text),
-                           type = 'scatter',
-                           mode = "lines+markers",
-                           line = list(
-                             color = '#7F7F7F'
-                           ),
-                           marker= list(
-                             color = '#7F7F7F'
-                           ),
-                           hovertemplate = paste('<b>',text,'</b>: %{y:.0f}',
-                                                 '<br><b>Date</b>: %{x}<br>',
-                                                 "<extra></extra>"))
-  fig <- fig %>% add_trace(x = var_to_plot$Date, 
-                           y = var_to_plot$Predicted,
-                           name = paste("Predicted"),
-                           type = 'scatter',
-                           mode = "lines+markers",
-                           line = list(
-                             color = '#CC0000'
-                           ),
-                           marker= list(
-                             color = '#CC0000'
-                           ),
-                           hovertemplate = paste('<b>Predicted</b>: %{y:.0f}',
-                                                 '<br><b>Date</b>: %{x}<br>',
-                                                 "<extra></extra>"))
-  
-  tekstas <- paste("Alpha=",unique(var_to_plot$alpha)[2],"\n Beta=",unique(var_to_plot$beta)[2],
-                   "\n Theta=",unique(var_to_plot$theta)[2])
-  
-  x_cord <- c(1.15)
-  y_cord <- c(-0.3)
-  
-  
-  fig <- fig %>% layout(title = '',
-                        shapes = list(vline(as.Date(unique(var_to_plot$T_0)[2], origin="1970-01-01")), vline(as.Date(unique(var_to_plot$T_1)[2], origin="1970-01-01"))),
-                        xaxis = list(title = 'Date', 
-                                     titlefont = list(size = 12),
-                                     type = 'date',
-                                     tickformat = "%Y-%m-%d"),
-                        yaxis=list(title = paste(text),
-                                   titlefont = list(size = 12)),
-                        margin = list(l = 50, r = 50, t = 60, b = 150),
-                        annotations = list(text = tekstas,
-                                           font = list(size = 12),
-                                           showarrow = FALSE,
-                                           xref = 'paper', x = x_cord,
-                                           yref = 'paper', y = y_cord,
-                                           align="right")
-  )
-  
-  fig <- fig %>% add_text(x = as.Date(unique(var_to_plot$T_0)[2], origin="1970-01-01")+2, 
-                          y = max(na.omit(var_to_plot$log_data)),
-                          text = ~"T_0",
-                          textposition = "right",
-                          showlegend = FALSE,
-                          name="tekstas",
-                          visible=T,
-                          hoverinfo="none")
-  
-  fig <- fig %>% add_text(x = as.Date(unique(var_to_plot$T_1)[2], origin="1970-01-01")+2, 
-                          y = max(na.omit(var_to_plot$log_data)),
-                          text = ~"T_1",
-                          textposition = "right",
-                          showlegend = FALSE,
-                          name="tekstas",
-                          visible=T,
-                          hoverinfo="none")
-  
-  fig
-}
-
-
-
-ui <- dashboardPage(
-  dashboardHeader(title = "Analysis of Covid-19"),
-  dashboardSidebar(
-    sidebarMenu(
-      menuItem("Plots", tabName = "plots", icon = icon("chart-line")),
-      menuItem("Analysis", tabName = "analysis", icon = icon("cogs"))
+shinyApp(
+  ui = dashboardPage(
+    
+    md = FALSE,
+    skin = "midnight",
+    
+    header = header_tab,
+    sidebar = sidebar_tab,
+    
+    body = body_tab,
+    
+    controlbar = dashboardControlbar(),
+    
+    title = "Covid-19",
+    footer = dashboardFooter(
+      left = "By Jovita Gudan",
+      right = "Vilnius, 2021"
     )
   ),
-  dashboardBody(
-    tabItems(
-      # First tab content
-      tabItem(tabName = "plots",
-              fluidRow(
-                box(
-                  selectInput("country", "Select country or region:",  choices = countries),
-                  selectInput("outcome", "Outcome:", 
-                              choices =  c("Cases per 100,000", 
-                                           "Cases (total)", "Deaths per 100,000",
-                                           "Deaths (total)", "Recovered (total)")),
-                  selectInput("scale", "Scale:", 
-                              choices =  c("Original", 
-                                           "Natural logarithm")),
-                  sliderInput("plot_date",
-                              label="Select initial date:",
-                              min = as.Date(min_date, "%Y-%m-%d"),
-                              max = as.Date(current_date, "%Y-%m-%d"),
-                              value=as.Date(min_date))
-               
-                )
-              ),
-             
-              fluidRow(
-                plotlyOutput("plot1", height = 500)
-              )
-      ),
+  server = function(input, output,session) {
+    
+    #<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+    #info of tab: "Home"
+    output$markdown <- renderUI({
+      file <- 'info/home.Rmd'
+      includeMarkdown(file)
+    })
+    
+    #<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+    #data input of tab: "Discrete data analysis" -> "Plots" 
+    
+    # update region selections
+    observeEvent(input$level_select, {
+      if (input$level_select=="World") {
+        updatePickerInput(session = session, inputId = "region_select", 
+                          choices = "World", selected = "World")
+      }
       
-      # Second tab content
-      tabItem(tabName = "analysis",
-              fluidRow(
-                box(
-                  selectInput("country2", "Select country or region:",  choices = countries),
-                  selectInput("outcome2", "Outcome:", 
-                              choices =  c("Cases per 100,000")),
-                  selectInput("scale2", "Scale:", 
-                              choices =  c("Natural logarithm"))
-                  # sliderInput("plot_date2",
-                  #             label="Select initial date:",
-                  #             min = as.Date(min_date, "%Y-%m-%d"),
-                  #             max = as.Date(current_date, "%Y-%m-%d"),
-                  #             value=as.Date(min_date))
-                  
-                )
-              ),
-              
-              fluidRow(
-                plotlyOutput("plot2", height = 500)
-              )
-      )
-    )
-  )
-)
-
-server <- function(input, output) {
-  
-  
-
-  
- # i_country <- reactive({normalized[which(rownames(normalized) %in% input$country),] })
-  
-  
-  # create dataframe with selected countries
-  country_reactive_db = reactive({
-    if (input$outcome=="Cases per 100,000") { 
-      db = normalized
-    } 
-    if (input$outcome=="Deaths (total)") { 
-      db = deaths
-    }
-    if (input$outcome=="Recovered (total)") { 
-      db = recovered
-    }
-    if (input$outcome=="Deaths per 100,000") { 
-      db = normalized_deaths
-    }
-    if (input$outcome=="Cases (total)") { 
-      db = acc_cases
-    }
-    if (input$scale=="Natural logarithm") {
-      db = log(db)
-      for(i in 1:length(rownames(db))){
-        db[i,which(db[i,] %in% -Inf)] <- NA
+      if (input$level_select=="Continent") {
+        updatePickerInput(session = session, inputId = "region_select", 
+                          choices = rownames(cases_continents), 
+                          selected = rownames(cases_continents))
       }
-    }
-    
-    db = db %>% filter(rownames(db) %in% input$country)
-    db = db[, which(as.Date(colnames(db)) >= as.Date(input$plot_date))]
-    
-  
-  })
-  
-  country_reactive_db2 = reactive({
-    if (input$outcome2=="Cases per 100,000") { 
-      db2 = normalized
-    } 
-    if (input$scale2=="Natural logarithm") {
-      db2 = log(db2)
-      for(i in 1:length(rownames(db2))){
-        db2[i,which(db2[i,] %in% -Inf)] <- NA
+      
+      if (input$level_select=="US state") {
+        updatePickerInput(session = session, inputId = "region_select", 
+                          choices = rownames(cases_US_states), 
+                          selected = rownames(cases_US_states)[which(rownames(cases_US_states) %in% c("Washington","New York State", "Illinois"))])
       }
-    }
+      
+      if (input$level_select=="Country") {
+        updatePickerInput(session = session, inputId = "region_select", 
+                          choices = countries_list, 
+                          selected = countries_list$`Northern Europe`[which(countries_list$`Northern Europe` %in% c("Lithuania", "Latvia", "Estonia"))])
+      }
+    }, ignoreInit = TRUE)
     
-    #db2 = db2 %>% filter(rownames(db2) %in% "Lithuania")
     
-    
-    db2 = db2 %>% filter(rownames(db2) %in% input$country2)
-    #db2 = db2[, which(as.Date(colnames(db2)) >= as.Date(input$plot_date2))]
-    
-    #Detection for the start of exponential growth
-    diff_db <- diff(na.omit(t(db2)))
-    colnames(diff_db)[1] <- "diff"
-    diff_db <- cbind(diff_db, 2:(dim(diff_db)[1]+1))
-    colnames(diff_db)[2] <- "t"
-    begin_exp <- which(diff_db!=0)[1]
- 
+    country_reactive_db = reactive({
+      if (input$level_select=="World" & input$outcome=="Cases (total)") { 
+        db = cases_world
+      }
+      if (input$level_select=="Continent" & input$outcome=="Cases (total)") { 
+        db = cases_continents 
+      }
+      if (input$level_select=="Country" & input$outcome=="Cases (total)") { 
+        db = cases_countries
+      }
+      if (input$level_select=="US state" & input$outcome=="Cases (total)") { 
+        db = cases_US_states
+      }
+      
+      if (input$level_select=="World" & input$outcome=="Cases per 100,000") { 
+        db = cases_norm_world
+      }
+      if (input$level_select=="Continent" & input$outcome=="Cases per 100,000") { 
+        db = cases_norm_continents 
+      }
+      if (input$level_select=="Country" & input$outcome=="Cases per 100,000") { 
+        db = cases_norm_countries
+      }
+      if (input$level_select=="US state" & input$outcome=="Cases per 100,000") { 
+        db = cases_norm_US_states
+      }
+      
+      
+      if (input$level_select=="World" & input$outcome=="Deaths (total)") { 
+        db = deaths_world
+      }
+      if (input$level_select=="Continent" & input$outcome=="Deaths (total)") { 
+        db = deaths_continents 
+      }
+      if (input$level_select=="Country" & input$outcome=="Deaths (total)") { 
+        db = deaths_countries
+      }
+      if (input$level_select=="US state" & input$outcome=="Deaths (total)") { 
+        db = deaths_US_states
+      }
+      
+      if (input$level_select=="World" & input$outcome=="Deaths per 100,000") { 
+        db = deaths_norm_world
+      }
+      if (input$level_select=="Continent" & input$outcome=="Deaths per 100,000") { 
+        db = deaths_norm_continents 
+      }
+      if (input$level_select=="Country" & input$outcome=="Deaths per 100,000") { 
+        db = deaths_norm_countries
+      }
+      if (input$level_select=="US state" & input$outcome=="Deaths per 100,000") { 
+        db = deaths_norm_US_states
+      }
+      
+      
+      
+      if (input$level_select=="World" & input$outcome=="Vaccinated (total)") { 
+        db = vacc_world
+      }
+      if (input$level_select=="Continent" & input$outcome=="Vaccinated (total)") { 
+        db = vacc_continents 
+      }
+      if (input$level_select=="Country" & input$outcome=="Vaccinated (total)") { 
+        db = vacc_countries
+      }
+      if (input$level_select=="US state" & input$outcome=="Vaccinated (total)") { 
+        db = vacc_US_states
+      }
+      
+      if (input$level_select=="World" & input$outcome=="Vaccinated per 100,000") { 
+        db = vacc_norm_world
+      }
+      if (input$level_select=="Continent" & input$outcome=="Vaccinated per 100,000") { 
+        db = vacc_norm_continents 
+      }
+      if (input$level_select=="Country" & input$outcome=="Vaccinated per 100,000") { 
+        db = vacc_norm_countries
+      }
+      if (input$level_select=="US state" & input$outcome=="Vaccinated per 100,000") { 
+        db = vacc_norm_US_states
+      }
 
-    #Detection for the end of exponential growth
-    fit_cpm = processStream(diff_db[begin_exp:dim(diff_db)[1],1], cpmType = "ExponentialAdjusted")
-    end_exp <- fit_cpm$changePoints[which(fit_cpm$changePoints-begin_exp>40)]
-    
-
-    #data table
-    log_data <- t(db2)
-    colnames(log_data)[1] <- "log_data"
-    Date <- as.Date(rownames(t(db2)))
-    log_data <- as.data.frame(log_data)
-    log_data$Date <- Date
-    
-    #subset data without NA
-    log_data_wna <- na.omit(t(db2))
-    log_data_wnaa <- as.data.frame(log_data_wna[1:dim(log_data_wna)[1]])
-    colnames(log_data_wnaa)[1] <- "log_data"
-    log_data_wnaa$Date <- as.Date(rownames(log_data_wna))
-    
-    
-    #detection of optimal negative exponential model
-    rss_all <- matrix(NA,ncol=3, nrow=(length(begin_exp:(begin_exp+5))*length(end_exp)*length(0:10)))
-    colnames(rss_all) <- c("Begin","End","RSS")
-    count <- 0
-    for(j in begin_exp:(begin_exp+5)){
-      for(u in end_exp){
-        for(k in 0:10){
-          count <- count + 1
-          model <- neg_expo_model(log_data_wnaa$log_data, j, u+k)
-          rss <- sum(residuals(model)^2)
-          rss_all[count,1] <- j
-          rss_all[count,2] <- u+k
-          rss_all[count,3] <- rss
+      if (input$scale=="Natural logarithm") {
+        db = log(db)
+        for(i in 1:length(rownames(db))){
+          db[i,which(db[i,] %in% -Inf)] <- NA
         }
       }
-    }
+      
+      db = db %>% filter(rownames(db) %in% input$region_select)
+      db = db[, which(as.Date(colnames(db)) >= as.Date(input$plot_date))]
+      
+      
+    })
     
-    #estimation of optimal negative exponential model
-    min_id <- which(rss_all[,3] %in% max(rss_all[,3]))
-    min_index <- rss_all[min_id,1]:rss_all[min_id,2]
-    model <- neg_expo_model(log_data_wnaa$log_data, rss_all[min_id,1], rss_all[min_id,2])
+    #plot of tab: "Discrete data analysis" -> "Plots" 
+    output$plot1 <- renderPlotly({
+      cumulative_plot(country_reactive_db(), input$outcome)
+    })
+    #<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+    
+    #<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+    #data input of tab: "Discrete data analysis" -> "Model" 
+    
+    observeEvent(input$level_select2, {
+      if (input$level_select2=="World") {
+        updatePickerInput(session = session, inputId = "region_select2", 
+                          choices = "World", selected = "World")
+      }
+      
+      if (input$level_select2=="Continent") {
+        updatePickerInput(session = session, inputId = "region_select2", 
+                          choices = rownames(cases_continents), 
+                          selected = rownames(cases_continents))
+      }
+      
+      if (input$level_select2=="US state") {
+        updatePickerInput(session = session, inputId = "region_select2", 
+                          choices = rownames(cases_US_states), 
+                          selected = rownames(cases_US_states)[which(rownames(cases_US_states) %in% c("Washington"))])
+      }
+      
+      if (input$level_select2=="Country") {
+        updatePickerInput(session = session, inputId = "region_select2", 
+                          choices = countries_list, 
+                          selected = countries_list$`Northern Europe`[which(countries_list$`Northern Europe` %in% c("Lithuania"))])
+      }
+    }, ignoreInit = TRUE)
     
     
-    
-    
-    #summary(model)
-    # add fitted curve
-   # plot( log_data_wnaa$Date[min_index], log_data_wnaa$log_data[min_index])
-    x <- 1:length(log_data_wnaa$log_data[min_index])
-    #lines(log_data_wnaa$Date[min_index], predict(model, list(x = x)), col = 'skyblue', lwd = 3)
-    
-    #save predicted values
-    predicted_values <- as.data.frame(matrix(NA, ncol=2, nrow=length(log_data_wnaa$Date[min_index])))
-    predicted_values[,1] <- log_data_wnaa$Date[min_index]
-    predicted_values[,2] <- predict(model, list(x = x))
-    colnames(predicted_values) <- c("Date","Predicted")
-    
-    
-    
-    
-    place_to_write <- which(log_data$Date %in% log_data_wnaa$Date[min_index])
-    result <- merge(log_data,predicted_values,by=c("Date"),all.x=TRUE)
-    result$T_0 <- NA
-    result$T_0[place_to_write] <- as.Date(log_data_wnaa$Date[min_index][1]) 
-    result$T_1 <- NA
-    result$T_1[place_to_write] <- as.Date(log_data_wnaa$Date[min_index][length(log_data_wnaa$Date[min_index])])
-    result$alpha <- NA
-    result$alpha[place_to_write] <- coef(model)[1]
-    result$beta <- NA
-    result$beta[place_to_write] <- coef(model)[2]
-    result$theta <- NA
-    result$theta[place_to_write] <- coef(model)[3]
-    result$type <- NA
-    result$type[place_to_write] <- "Neg_exponential"
-    return(result)
-  })
-  #create plot 
-  output$plot1 <- renderPlotly({
-   
-    cumulative_plot(country_reactive_db(), input$outcome)
-    
-  })
-  
-  output$plot2 <- renderPlotly({
-    
-    prediction_plot(country_reactive_db2(), input$outcome2)
-    
-  })
-  
-  
-  
-  
-}
+    country_reactive_db2 = reactive({
+      
 
-shinyApp(ui, server)
+      if (input$level_select2=="World" & input$outcome2=="Cases per 100,000" ) { 
+        db2 = cases_norm_world
+        db3 = cases_norm_world
+      }
+      if (input$level_select2=="Continent" & input$outcome2=="Cases per 100,000") { 
+        db2 = cases_norm_continents 
+        db3 = cases_norm_continents
+      }
+      if (input$level_select2=="Country" & input$outcome2=="Cases per 100,000") { 
+        db2 = cases_norm_countries
+        db3 = cases_norm_countries
+      }
+      if (input$level_select2=="US state" & input$outcome2=="Cases per 100,000") { 
+        db2 = cases_norm_US_states
+        db3 = cases_norm_US_states
+      }
+      
+      
+
+
+      if (input$level_select2=="World" & input$outcome2=="Deaths per 100,000" ) {
+        db2 = deaths_norm_world
+        db3 = deaths_norm_world
+      }
+      if (input$level_select2=="Continent" & input$outcome2=="Deaths per 100,000" ) {
+        db2 = deaths_norm_continents
+        db3 = deaths_norm_continents
+      }
+      if (input$level_select2=="Country" & input$outcome2=="Deaths per 100,000" ) {
+        db2 = deaths_norm_countries
+        db3 = deaths_norm_countries
+      }
+      if (input$level_select2=="US state" & input$outcome2=="Deaths per 100,000") {
+        db2 = deaths_norm_US_states
+        db3 = deaths_norm_US_states
+      }
+
+
+
+      if (input$level_select2=="World" & input$outcome2=="Vaccinated per 100,000" ) {
+        db2 = vacc_norm_world
+        db3 = vacc_norm_world
+      }
+      if (input$level_select2=="Continent" & input$outcome2=="Vaccinated per 100,000" ) {
+        db2 = vacc_norm_continents
+        db3 = vacc_norm_continents
+      }
+      if (input$level_select2=="Country" & input$outcome2=="Vaccinated per 100,000" ) {
+        db2 = vacc_norm_countries
+        db3 = vacc_norm_countries
+      }
+      if (input$level_select2=="US state" & input$outcome2=="Vaccinated per 100,000" ) {
+        db2 = vacc_norm_US_states
+        db3 = vacc_norm_US_states
+      }
+      
+
+   
+        db2 = log(db2)
+        for(i in 1:length(rownames(db2))){
+          db2[i,which(db2[i,] %in% -Inf)] <- NA
+        }
+        
+      
+      db2 = db2 %>% filter(rownames(db2) %in% input$region_select2)
+      db3 = db3 %>% filter(rownames(db3) %in% input$region_select2)
+      
+      
+
+      
+      #Results table
+      results <- t(db2)
+      colnames(results)[1] <- "log_data"
+      Date <- as.Date(rownames(t(db2)))
+      results <- as.data.frame(results)
+      results$Date <- Date
+      results$Predicted <- NA
+      results$Section_date <- NA
+      results$Acc_data <- unname(t(db3))
+      
+      #pre virus period
+      pre_virus <- results[!is.na(results$log_data) & is.na(results$Predicted),]
+      if (!is.na(mean(pre_virus$log_data))){
+        diff_log_data <- diff(pre_virus$log_data)
+        begin_exp <- which(diff_log_data!=0)[1]
+        pre_rss <- numeric(3)
+        pre_rss[1] <- sum(residuals(lm(pre_virus$log_data[1:begin_exp] ~ 1))^2)
+        x <- 1:begin_exp
+        pre_rss[2] <- tryCatch(sum(residuals(lm(pre_virus$log_data[1:begin_exp] ~ poly(x,1)))^2), error=function(e) rss=NA)
+        pre_rss[3] <- tryCatch(sum(residuals(lm(pre_virus$log_data[1:begin_exp] ~ poly(x,2)))^2), error=function(e) rss=NA)
+
+
+        which_way <- which(pre_rss %in% max(na.omit(pre_rss)))
+        if(which_way==1){
+          model <- lm(pre_virus$log_data[1:begin_exp] ~ 1)
+          pre_pred <- predict(model)
+        }else{
+          x <- 1:begin_exp
+          model <- lm(pre_virus$log_data[1:begin_exp] ~ poly(x,which_way-1))
+          pre_pred <- predict(model, list(x = x))
+        }
+        results$Predicted[which(results$Date %in% pre_virus$Date[1:begin_exp])] <- pre_pred
+        results$Section_date[which(results$Date %in% pre_virus$Date[1:begin_exp])] <- pre_virus$Date[begin_exp]
+      }
+
+      pre_virus <- results[!is.na(results$log_data) & is.na(results$Predicted),]
+      diff_log_data <- diff(pre_virus$log_data)
+      while(mean(diff_log_data[1:5])==0){
+        if (!is.na(mean(pre_virus$log_data))){
+          diff_log_data <- diff(pre_virus$log_data)
+          begin_exp <- which(diff_log_data!=0)[1]
+          pre_rss <- numeric(3)
+          pre_rss[1] <- sum(residuals(lm(pre_virus$log_data[1:begin_exp] ~ 1))^2)
+          x <- 1:begin_exp
+          pre_rss[2] <- tryCatch(sum(residuals(lm(pre_virus$log_data[1:begin_exp] ~ poly(x,1)))^2), error=function(e) rss=NA)
+          pre_rss[3] <- tryCatch(sum(residuals(lm(pre_virus$log_data[1:begin_exp] ~ poly(x,2)))^2), error=function(e) rss=NA)
+
+
+          which_way <- which(pre_rss %in% max(na.omit(pre_rss)))
+          if(which_way==1){
+            model <- lm(pre_virus$log_data[1:begin_exp] ~ 1)
+            pre_pred <- predict(model)
+          }else{
+            x <- 1:begin_exp
+            model <- lm(pre_virus$log_data[1:begin_exp] ~ poly(x,which_way-1))
+            pre_pred <- predict(model, list(x = x))
+          }
+          results$Predicted[which(results$Date %in% pre_virus$Date[1:begin_exp])] <- pre_pred
+          results$Section_date[which(results$Date %in% pre_virus$Date[1:begin_exp])] <- pre_virus$Date[begin_exp]
+        }
+
+        pre_virus <- results[!is.na(results$log_data) & is.na(results$Predicted),]
+        diff_log_data <- diff(pre_virus$log_data)
+      }
+
+
+      #
+      section_i <- results[!is.na(results$log_data) & is.na(results$Predicted) ,]
+      while (!is.na(mean(section_i$log_data))){
+        if (!is.na(mean(section_i$log_data))){
+          #find structural breaks
+          diff_log_data <- diff(section_i$log_data)
+          fit_cpm = processStream(diff_log_data, cpmType = "ExponentialAdjusted", ARL0=50000)
+          breaks_i <- c(fit_cpm$changePoints+20, length(diff_log_data)+1)
+
+          #estimate different models to fit the data with minimal residuals
+          if(length(breaks_i)!=0){
+            #ncol=7 => number of models
+            rss_all <- matrix(NA,ncol=7, nrow=length(breaks_i))
+            colnames(rss_all) <- c("Begin","End","RSS_exp","RSS_mean","RSS_poly1","RSS_poly2","RSS_poly3")
+            count <- 0
+            for(j in 1:length(breaks_i)){
+              count <- count + 1
+              rss_exp <- tryCatch(sum(residuals(neg_expo_model(section_i$log_data, 1, breaks_i[j]))^2), error=function(e) rss=NA)
+              rss_mean <- sum(residuals(lm(section_i$log_data[1:breaks_i[j]] ~ 1))^2)
+              x <- 1:breaks_i[j]
+              rss_poly_1 <- tryCatch(sum(residuals(lm(section_i$log_data[1:breaks_i[j]] ~ poly(x,1)))^2), error=function(e) rss=NA)
+              rss_poly_2 <- tryCatch(sum(residuals(lm(section_i$log_data[1:breaks_i[j]] ~ poly(x,2)))^2), error=function(e) rss=NA)
+              rss_poly_3 <- tryCatch(sum(residuals(lm(section_i$log_data[1:breaks_i[j]] ~ poly(x,3)))^2), error=function(e) rss=NA)
+              #rss <- ifelse(is(model, "try-error"), NA, sum(residuals(model)^2))
+              rss_all[count,1] <- 1
+              rss_all[count,2] <- breaks_i[j]
+              rss_all[count,3] <- rss_exp
+              rss_all[count,4] <- rss_mean
+              rss_all[count,5] <- rss_poly_1
+              rss_all[count,6] <- rss_poly_2
+              rss_all[count,7] <- rss_poly_3
+            }
+          }
+
+          #optimal model's parameters
+          row_nm <- which(min(rss_all[,3:7], na.rm=T) %in% rss_all[,3:7])
+          col_nm <- which(rss_all[row_nm,3:7] %in% min(rss_all[row_nm,3:7], na.rm=T))
+
+          #estimation of an optional model
+          if(col_nm==1){
+            x <- rss_all[row_nm,1]:rss_all[row_nm,2]
+            model <- neg_expo_model(section_i$log_data, rss_all[row_nm,1],  rss_all[row_nm,2])
+            results$Predicted[which(results$Date %in% section_i$Date[rss_all[row_nm,1]:rss_all[row_nm,2]])] <- predict(model, list(x = x))
+            results$Section_date[which(results$Date %in% section_i$Date[rss_all[row_nm,1]:rss_all[row_nm,2]])] <- section_i$Date[rss_all[row_nm,2]]
+          }else if(col_nm==2){
+            model <- lm(section_i$log_data[rss_all[row_nm,1]:rss_all[row_nm,2]] ~ 1)
+            results$Predicted[which(results$Date %in% section_i$Date[rss_all[row_nm,1]:rss_all[row_nm,2]])] <- predict(model)
+            results$Section_date[which(results$Date %in% section_i$Date[rss_all[row_nm,1]:rss_all[row_nm,2]])] <- section_i$Date[rss_all[row_nm,2]]
+          }else{
+            x <- rss_all[row_nm,1]:rss_all[row_nm,2]
+            model <- lm(section_i$log_data[rss_all[row_nm,1]:rss_all[row_nm,2]] ~ poly(x,col_nm-2))
+            results$Predicted[which(results$Date %in% section_i$Date[rss_all[row_nm,1]:rss_all[row_nm,2]])] <- predict(model, list(x = x))
+            results$Section_date[which(results$Date %in% section_i$Date[rss_all[row_nm,1]:rss_all[row_nm,2]])] <- section_i$Date[rss_all[row_nm,2]]
+          }
+
+          section_i <- results[!is.na(results$log_data) & is.na(results$Predicted) ,]
+          if(nrow(section_i)==0){
+            hor=10
+            new_rows <- as.data.frame(cbind(NA, results$Date[dim(results)[1]]+1:hor, NA, NA, NA))
+            colnames(new_rows) <- names(results)
+            new_rows$Date <- as.Date(new_rows$Date, format="%Y-%m-%d", origin="1970-01-01")
+            results <- rbind(results, new_rows)
+            x_new <- (rss_all[row_nm,2]+1):(rss_all[row_nm,2]+hor)
+            #+1:hor
+
+
+            if(col_nm==2){
+              results[(dim(results)[1]-(hor-1)):dim(results)[1],"Predicted"] <- predict(model)
+            }else{
+              results[(dim(results)[1]-(hor-1)):dim(results)[1],"Predicted"] <- predict(model, list(x = x_new))
+            }
+
+
+          }
+        }
+      }
+
+
+      for(j in 1:(dim(results)[1]-1)){
+        if(is.na(results[j+1,"Predicted"])){
+          results[j+1,"Predicted"] <- NA
+
+        }else if(!is.na(results[j,"Predicted"])) {
+          if(results[j+1,"Predicted"]<results[j,"Predicted"]){
+            results[j+1,"Predicted"] <- results[j,"Predicted"]
+          }
+        }
+      }
+
+      results$Pred_orig <- exp(results$Predicted)
+      cases_per_pop <- 100000
+      # pop_dat$Name_countr <- trimws(paste(pop_dat$"Country/Region", pop_dat$"Province/State"),"r")
+      population <- population_info[which(population_info$location %in% input$region_select2),"population"]
+
+      results$Cases_total <- (results$Acc_data*population)/cases_per_pop
+      results$Cases_total_pred <- round((results$Pred_orig*population)/cases_per_pop,0)
+
+      results$Cases_total_log <- log(results$Cases_total)
+      results$Cases_total_pred_log <- log(results$Cases_total_pred)
+
+
+      return(results)
+    })
+    
+    # plot of tab: "Discrete data analysis" -> "Model"
+    output$plot2 <- renderPlotly({
+
+      prediction_plot(country_reactive_db2(), input$outcome2, input$scale2)
+
+    })
+
+    
+
+    #<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+    #data input of tab: "Functional data analysis" -> "Plots" 
+    
+    observeEvent(input$level_select_fda, {
+      if (input$level_select_fda=="World") {
+        updatePickerInput(session = session, inputId = "region_select_fda", 
+                          choices = "World", selected = "World")
+      }
+      
+      if (input$level_select_fda=="Continent") {
+        updatePickerInput(session = session, inputId = "region_select_fda", 
+                          choices = rownames(cases_continents), 
+                          selected = rownames(cases_continents))
+      }
+      
+      if (input$level_select_fda=="US state") {
+        updatePickerInput(session = session, inputId = "region_select_fda", 
+                          choices = rownames(cases_US_states), 
+                          selected = rownames(cases_US_states)[which(rownames(cases_US_states) %in% c("Washington","New York State", "Illinois"))])
+      }
+      
+      if (input$level_select_fda=="Country") {
+        updatePickerInput(session = session, inputId = "region_select_fda", 
+                          choices = countries_list, 
+                          selected = countries_list$`Northern Europe`[which(countries_list$`Northern Europe` %in% c("Lithuania", "Latvia", "Estonia"))])
+      }
+    }, ignoreInit = TRUE)
+    
+    
+    country_reactive_db_fda = reactive({
+
+      
+      if (input$level_select_fda=="World" & input$outcome_fda=="Cases per 100,000") { 
+        db = cases_norm_world_fd
+      }
+      if (input$level_select_fda=="Continent" & input$outcome_fda=="Cases per 100,000") { 
+        db = cases_norm_continents_fd
+      }
+      if (input$level_select_fda=="Country" & input$outcome_fda=="Cases per 100,000") { 
+        db = cases_norm_countries_fd
+      }
+      if (input$level_select_fda=="US state" & input$outcome_fda=="Cases per 100,000") { 
+        db = cases_norm_US_states_fd
+      }
+      
+      
+      
+      
+      
+      if (input$level_select_fda=="World" & input$outcome_fda=="Deaths per 100,000") { 
+        db = deaths_norm_world_fd
+      }
+      if (input$level_select_fda=="Continent" & input$outcome_fda=="Deaths per 100,000") { 
+        db = deaths_norm_continents_fd
+      }
+      if (input$level_select_fda=="Country" & input$outcome_fda=="Deaths per 100,000") { 
+        db = deaths_norm_countries_fd
+      }
+      if (input$level_select_fda=="US state" & input$outcome_fda=="Deaths per 100,000") { 
+        db = deaths_norm_US_states_fd
+      }
+      
+
+      
+      if (input$level_select_fda=="World" & input$outcome_fda=="Vaccinated per 100,000") { 
+        db = vacc_norm_world_fd
+      }
+      if (input$level_select_fda=="Continent" & input$outcome_fda=="Vaccinated per 100,000") { 
+        db = vacc_norm_continents_fd
+      }
+      if (input$level_select_fda=="Country" & input$outcome_fda=="Vaccinated per 100,000") { 
+        db = vacc_norm_countries_fd
+      }
+      if (input$level_select_fda=="US state" & input$outcome_fda=="Vaccinated per 100,000") { 
+        db = vacc_norm_US_states_fd
+      }
+      
+
+      db_fd = db$fda_data$Wfdobj[which(db$fda_data$Wfdobj$fdnames$reps %in% input$region_select_fda)]
+      db0 = as.data.frame(db$level) %>% filter(rownames(db$level) %in% input$region_select_fda)
+      db1 = as.data.frame(t(db$first_deriv)) %>% filter(rownames(t(db$first_deriv)) %in% input$region_select_fda)
+      db2 = as.data.frame(t(db$second_deriv)) %>% filter(rownames(t(db$second_deriv)) %in% input$region_select_fda)
+      
+      db = list("fd"=db_fd, "level"=db0, "first_deriv"=db1, "second_deriv"=db2)
+      
+
+    })
+    
+    #plot of tab: "Functional data analysis" -> "Plots" 
+    # Level plot
+    output$plot_fda_level <- renderPlotly({
+      cumulative_plot_fda(country_reactive_db_fda(), input$outcome_fda, "level")
+    })
+    
+    # First derivative plot
+    output$plot_fda_first_deriv <- renderPlotly({
+      cumulative_plot_fda(country_reactive_db_fda(), input$outcome_fda, "first_deriv")
+    })
+    
+    # Second derivative plot
+    output$plot_fda_second_deriv <- renderPlotly({
+      cumulative_plot_fda(country_reactive_db_fda(), input$outcome_fda, "second_deriv")
+    })
+    
+    
+    #<><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><><>
+    #data input of tab: "Functional data analysis" -> "Exploratory analysis"
+    
+    observeEvent(input$level_select_fda_explor, {
+      if (input$level_select_fda_explor=="Continent") {
+        updatePickerInput(session = session, inputId = "region_select_fda_explor", 
+                          choices = names(countries_list),
+                          selected = names(countries_list)[11])
+      }
+      
+      if (input$level_select_fda_explor=="US state") {
+        updatePickerInput(session = session, inputId = "region_select_fda_explor", 
+                          choices = c("All"), 
+                          selected = c("All"))
+      }
+
+    }, ignoreInit = TRUE)
+    
+    
+    country_reactive_db_fda_explor = reactive({
+      
+      
+      if (input$level_select_fda_explor=="Continent" & input$outcome_fda_explor=="Cases per 100,000") { 
+        db = cases_norm_countries_fd
+      }
+      if (input$level_select_fda_explor=="Continent" & input$outcome_fda_explor=="Deaths per 100,000") { 
+        db = deaths_norm_countries_fd
+      }
+      if (input$level_select_fda_explor=="Continent" & input$outcome_fda_explor=="Vaccinated per 100,000") { 
+        db = vacc_norm_countries_fd
+      }
+
+      
+      
+      if (input$level_select_fda_explor=="US state" & input$outcome_fda_explor=="Cases per 100,000") { 
+        db = cases_norm_US_states_fd
+      }
+      if (input$level_select_fda_explor=="US state" & input$outcome_fda_explor=="Deaths per 100,000") { 
+        db = deaths_norm_US_states_fd
+      }
+      if (input$level_select_fda_explor=="US state" & input$outcome_fda_explor=="Vaccinated per 100,000") { 
+        db = vacc_norm_US_states_fd
+      }
+      
+      
+      if(input$level_select_fda_explor=="Continent"){
+      # countries_in_region <- countries_list[which(names(countries_list) %in% 'Northern Europe')][[1]]
+      countries_in_region <- countries_list[which(names(countries_list) %in% input$region_select_fda_explor)][[1]]
+      fd_region <- db$fda_data$Wfdobj[which(db$fda_data$Wfdobj$fdnames$reps %in% countries_in_region)]
+      fd_reg <- Data2fd(seq(0,1, length.out=length(colnames(db$level))), t(db$level[which(rownames(db$level) %in% countries_in_region),]))
+      fdata_region <- fdata(fd_reg,argvals=seq(0,1, length.out=length(colnames(db$level))), rangeval=range(0,1))
+      level_region = db$level[which(rownames(db$level) %in% countries_in_region),]
+      }else{
+        fd_region <- db$fda_data$Wfdobj 
+        fd_reg <- Data2fd(seq(0,1, length.out=length(colnames(db$level))), t(db$level))
+        fdata_region <- fdata(fd_reg,argvals=seq(0,1, length.out=length(colnames(db$level))), rangeval=range(0,1))
+        level_region = db$level
+      }
+      
+      db = list("fda"=fd_region, "fdata"=fdata_region, "level" = level_region)
+      
+
+
+      
+      fdata_region <- db$fdata
+      fd_region <- db$fda
+      
+      #Depth
+      md =  depth.FM(fdata_region)
+      cur <- c(md$lmed)
+      # #Mean
+      mean_EU <- mean.fd(fd_region)
+      # #outliers
+      out2<-outliers.depth.pond(fdata_region,nb=100,dfunc=depth.FM)$outliers
+      # #SD
+      sd_EU <- sd.fd(fd_region)
+      
+      
+      
+      #evaluate curves at specific points
+      # fd_eval = eval.monfd(db$fdata$argvals, fd_region)
+      EU_curves =  db$level
+      rownames(EU_curves) <- rownames(fdata_region$data)
+      EU_curves <- as.data.frame(t(EU_curves))
+      date_seq <- seq(as.Date(min(as.Date(colnames(db$level))),format="%Y-%m-%d"),
+                      by=1, length.out=dim(EU_curves)[1])
+      EU_curves$Date <- date_seq
+      
+      only_data_EU <- EU_curves[,-which(colnames(EU_curves) %in% "Date")]
+      vars_to_sum =  names(only_data_EU)
+      sd_EU <- only_data_EU %>%
+        group_by(row_number()) %>%
+        do(data.frame(SD = sd(unlist(.[vars_to_sum]), na.rm=T)))
+      
+      to_plot_table <- EU_curves %>%
+        pivot_longer(!Date, names_to="country", values_to="var"
+        ) 
+      
+      to_plot_table <- to_plot_table[order(to_plot_table$country, to_plot_table$Date),]
+      
+      #mean data
+      filtr_mean <- data.frame("Date"=unique(to_plot_table$Date),
+                               "var" = rowMeans(EU_curves[-which(colnames(EU_curves) %in% "Date")]),
+                               "country"="Mean")
+      # #depth data
+      filtr_depth <- to_plot_table[which(to_plot_table$country %in% names(cur)),]
+      # #Outliers data
+      filtr_outliers <- to_plot_table[which(to_plot_table$country %in% out2),]
+      # #CI data
+      filtr_CI <- data.frame("Date"=unique(to_plot_table$Date),
+                             "CI_lower" = ifelse(filtr_mean$var-1.96*sd_EU$SD<0,0,filtr_mean$var-1.96*sd_EU$SD),
+                             "CI_upper" = filtr_mean$var+1.96*sd_EU$SD,
+                             "country"="CI",
+                             var=2)
+      
+      #data with no outliers
+      if(length(out2) != 0){
+        data_region_wo <-db$level[-which(rownames(db$level) %in% out2), ]
+      }else{
+        data_region_wo <- db$level
+      }
+      
+      
+      #fPCA
+      fit.fpca = fpca.sc(Y = fdata_region$data, pve=0.99)
+      
+      
+      return(list("to_plot_table"=to_plot_table, "depth"=filtr_depth, "outliers"=filtr_outliers, "CI"=filtr_CI, "mean"=filtr_mean, "fPCA"=fit.fpca))
+      
+    })
+    
+    
+    
+    
+    #plot of tab: "Functional data analysis" -> "Exploratory analysis and fPCA" 
+    output$plot_fda_explor <- renderPlotly({
+      withProgress(message = 'Calculation in progress',
+                   detail = 'This may take a while...', value = 0, {
+                     for (i in 1:350) {
+                       incProgress(1/350)
+                       Sys.sleep(1)
+                     }
+                   })
+      explor_plot_fda(country_reactive_db_fda_explor(), input$outcome_fda_explor)
+
+    })
+    
+    
+    #plot of tab: "Functional data analysis" -> "Exploratory analysis and fPCA" 
+    output$plot_fda_fPCA_harm <- renderPlotly({
+      fPCA_harm_plot_fda(country_reactive_db_fda_explor(), input$outcome_fda_explor)
+    })
+    
+    #plot of tab: "Functional data analysis" -> "Exploratory analysis and fPCA" 
+    output$plot_fda_fPCA_harmD1 <- renderPlotly({
+      fPCA_harmD_plot_fda(country_reactive_db_fda_explor(), 1, input$outcome_fda_explor)
+    })
+    
+    #plot of tab: "Functional data analysis" -> "Exploratory analysis and fPCA" 
+    output$plot_fda_fPCA_harmD2 <- renderPlotly({
+      fPCA_harmD_plot_fda(country_reactive_db_fda_explor(), 2, input$outcome_fda_explor)
+    })
+    
+    #plot of tab: "Functional data analysis" -> "Exploratory analysis and fPCA" 
+    output$plot_fda_fPCA_harmD3 <- renderPlotly({
+      fPCA_harmD_plot_fda(country_reactive_db_fda_explor(), 3, input$outcome_fda_explor)
+    })
+    
+    
+    #plot of tab: "Functional data analysis" -> "Exploratory analysis and fPCA" 
+    output$plot_fda_fPCA_scores <- renderPlotly({
+      fPCA_scores_plot_fda(country_reactive_db_fda_explor(), input$outcome_fda_explor)
+    })
+    
+    
+    
+    
+    
+    country_reactive_db_panel_model = reactive({
+      if (input$outcome_fda_panel_model=="Cases per 100,000") { 
+        db = cases_norm_countries_fd
+      }
+      if (input$outcome_fda_panel_model=="Deaths per 100,000") { 
+        db = deaths_norm_countries_fd 
+      }
+      if (input$outcome_fda_panel_model=="Vaccinated per 100,000") { 
+        db = vacc_norm_countries_fd
+      }
+
+   
+      db = db$level[which(rownames(db$level) %in% unname(unlist(continents_list))),]
+      regions <- merge(data.frame("location"=rownames(db)),Countries_info_1[,c("location", "region")], by="location")
+      return(list("data"=db, "regions"=regions))
+      
+    })
+    
+    
+    
+    #plot of tab: "Functional data analysis" -> "Exploratory analysis and fPCA" 
+    output$plot_fda_panel_model <- renderPlotly({
+      withProgress(message = 'Calculation in progress',
+                   detail = 'This may take a while...', value = 0, {
+                     for (i in 1:250) {
+                       incProgress(1/250)
+                       Sys.sleep(1)
+                     }
+                   })
+      panel_model_plot_fda(country_reactive_db_panel_model(), input$outcome_fda_panel_model)
+    })
+    
+    
+    
+    
+    
+    
+  }
+)
+
+
+
+
+
 

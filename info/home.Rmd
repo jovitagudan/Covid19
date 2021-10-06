@@ -1,0 +1,15 @@
+---
+runtime: shiny
+title: "test_presentation"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Global analysis of the COVID-19 outbreak profiles 
+
+To be continued. For more details see <http://www.covid19.projektas.vu.lt/2021/01/04/srtaipsnis-global-analysis-of-the-covid-19-outbreak-profiles/>.
+
+Status: `finished = FALSE`
