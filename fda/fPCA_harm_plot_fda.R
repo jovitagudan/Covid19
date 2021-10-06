@@ -1,5 +1,7 @@
 
 
+# data_explor <- list("to_plot_table"=to_plot_table, "depth"=filtr_depth, "outliers"=filtr_outliers, "CI"=filtr_CI, "mean"=filtr_mean, "fPCA"=fit.fpca)
+# ylab_text <- "o"
 
 
 fPCA_harm_plot_fda <- function(data_explor, ylab_text){
@@ -7,14 +9,14 @@ fPCA_harm_plot_fda <- function(data_explor, ylab_text){
   fpca.obj <- data_explor$fPCA
   
   harmonics <- data.frame(fpca.obj$efunctions)
-  colnames(harmonics) <- c("fPC1","fPC2", "fPC3")
+  colnames(harmonics) = c(paste0("fPC", 1:fpca.obj$npc))
   harmonics$Date <- sort(unique((data_explor$to_plot_table$Date)))
   
   to_plot_table <- harmonics %>%
-    pivot_longer(!Date, names_to="PCs", values_to="var"
+    pivot_longer(!Date, names_to="fPCs", values_to="var"
     )
   
-  un_colors <- length(unique(to_plot_table$PCs))
+  un_colors <- length(unique(to_plot_table$fPCs))
   
   fig <- plot_ly()
   
@@ -24,8 +26,8 @@ fPCA_harm_plot_fda <- function(data_explor, ylab_text){
     y = ~var,
     type = "scatter",
     mode = "lines",
-    color = ~PCs,
-    text=~PCs,
+    color = ~fPCs,
+    text=~fPCs,
     colors = colorRampPalette(unname(jcolors('pal2')))(un_colors),
     line = list(width = 2),
     showlegend = TRUE) 

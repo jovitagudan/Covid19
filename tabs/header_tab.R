@@ -2,7 +2,7 @@ header_tab = dashboardHeader(
   fixed = TRUE,
   title = tagList(
     span(class = "logo-lg", "Analysis of Covid-19"), 
-    img(src = "covid_green.png"),
+    
     
     leftUI = tagList(
       dropdownBlock(

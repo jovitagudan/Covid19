@@ -19,15 +19,23 @@
 # data_explor <- list("to_plot_table"=to_plot_table, "depth"=filtr_depth, "outliers"=filtr_outliers, "CI"=filtr_CI, "mean"=filtr_mean, "fPCA"=fit.fpca)
 # ylab_text <- "o"
 
-explor_plot_fda <- function(data_explor, ylab_text){
+explor_plot_fda <- function(data_explor, ylab_text, plot_type){
   
 
-  
+  if(plot_type=="level"){
   to_plot_table <- data_explor$to_plot_table
   filtr_CI <- data_explor$CI
   filtr_depth <- data_explor$depth
   filtr_outliers <- data_explor$outliers
   filtr_mean <- data_explor$mean
+  }else{
+    to_plot_table <- data_explor$to_plot_table_int
+    filtr_CI <- data_explor$CI_int
+    filtr_depth <- data_explor$depth_int
+    filtr_outliers <- data_explor$outliers_int
+    filtr_mean <- data_explor$mean_int
+    
+  }
   
   #plot
   #line types
@@ -49,7 +57,7 @@ fig <- fig %>%  add_trace(
     mode = "lines",
     color = ~country,
     text=~country,
-    colors = gray.colors(un_colors),
+    colors = "#7F7F7F",
     linetype = ~country,
     hovertemplate = paste('<b>%{text}</b>: %{y:,.0f}',
                           "<extra></extra>"),
@@ -117,7 +125,7 @@ fig <- fig %>% layout(title = list(text='',
                       margin = list(l = 50, r = 50, t = 60, b = 150),
                       paper_bgcolor='#353c42',
                       plot_bgcolor='#353c42',
-                      hovermode = "x unified",
+                      # hovermode = "x unified",
                       hoverlabel=list(font=list(color="white")),
                       legend = list(font=list(color="white"))
 )

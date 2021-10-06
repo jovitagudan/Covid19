@@ -5,9 +5,9 @@ account: jovitagudan
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 2735423
-bundleId: 5088903
+bundleId: 5110308
 url: https://jovitagudan.shinyapps.io/Covid19/
-when: 1632998360.70512
-lastSyncTime: 1632998360.70512
+when: 1633526451.54128
+lastSyncTime: 1633526451.54128
 asMultiple: FALSE
 asStatic: FALSE

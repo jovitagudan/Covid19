@@ -602,14 +602,24 @@ shinyApp(
       fd_reg <- Data2fd(seq(0,1, length.out=length(colnames(db$level))), t(db$level[which(rownames(db$level) %in% countries_in_region),]))
       fdata_region <- fdata(fd_reg,argvals=seq(0,1, length.out=length(colnames(db$level))), rangeval=range(0,1))
       level_region = db$level[which(rownames(db$level) %in% countries_in_region),]
+      
+      fd_reg_int <- Data2fd(seq(0,1, length.out=length(rownames(db$first_deriv))), db$first_deriv[,which(colnames(db$first_deriv) %in% countries_in_region)])
+      fdata_region_int <- fdata(fd_reg_int,argvals=seq(0,1, length.out=length(rownames(db$first_deriv))), rangeval=range(0,1))
+      first_deriv_region <- t(db$first_deriv[,which(colnames(db$first_deriv) %in% countries_in_region)])
+      
+      
       }else{
         fd_region <- db$fda_data$Wfdobj 
         fd_reg <- Data2fd(seq(0,1, length.out=length(colnames(db$level))), t(db$level))
         fdata_region <- fdata(fd_reg,argvals=seq(0,1, length.out=length(colnames(db$level))), rangeval=range(0,1))
         level_region = db$level
+        
+        fd_reg_int <- Data2fd(seq(0,1, length.out=length(rownames(db$first_deriv))), db$first_deriv)
+        fdata_region_int <- fdata(fd_reg_int,argvals=seq(0,1, length.out=length(rownames(db$first_deriv))), rangeval=range(0,1))
+        first_deriv_region <- t(db$first_deriv)
       }
       
-      db = list("fda"=fd_region, "fdata"=fdata_region, "level" = level_region)
+      db = list("fda"=fd_region, "fdata"=fdata_region, "level" = level_region, "fda_int" = fd_reg_int, "fdata_int"= fdata_region_int, "first_deriv"=first_deriv_region)
       
 
 
@@ -677,23 +687,90 @@ shinyApp(
       fit.fpca = fpca.sc(Y = fdata_region$data, pve=0.99)
       
       
-      return(list("to_plot_table"=to_plot_table, "depth"=filtr_depth, "outliers"=filtr_outliers, "CI"=filtr_CI, "mean"=filtr_mean, "fPCA"=fit.fpca))
+      
+      fdata_region_int <- db$fdata_int
+      fd_region_int <- db$fda_int
+      
+      #Depth
+      md_int =  depth.FM(fdata_region_int)
+      cur_int <- c(md_int$lmed)
+      # #Mean
+      mean_EU_int <- mean.fd(fd_region_int)
+      # #outliers
+      out2_int <-outliers.depth.pond(fdata_region_int,nb=100,dfunc=depth.FM)$outliers
+      # #SD
+      sd_EU_int <- sd.fd(fd_region_int)
+      
+      
+      
+      #evaluate curves at specific points
+      # fd_eval = eval.monfd(db$fdata$argvals, fd_region)
+      EU_curves_int =  db$first_deriv
+      rownames(EU_curves_int) <- rownames(fdata_region_int$data)
+      EU_curves_int <- as.data.frame(t(EU_curves_int))
+      date_seq <- seq(as.Date(min(as.Date(colnames(db$first_deriv))),format="%Y-%m-%d"),
+                      by=1, length.out=dim(EU_curves_int)[1])
+      EU_curves_int$Date <- date_seq
+      
+      only_data_EU_int <- EU_curves_int[,-which(colnames(EU_curves_int) %in% "Date")]
+      vars_to_sum_int =  names(only_data_EU_int)
+      sd_EU_int <- only_data_EU_int %>%
+        group_by(row_number()) %>%
+        do(data.frame(SD = sd(unlist(.[vars_to_sum_int]), na.rm=T)))
+      
+      to_plot_table_int <- EU_curves_int %>%
+        pivot_longer(!Date, names_to="country", values_to="var"
+        ) 
+      
+      to_plot_table_int <- to_plot_table_int[order(to_plot_table_int$country, to_plot_table_int$Date),]
+      
+      #mean data
+      filtr_mean_int <- data.frame("Date"=unique(to_plot_table_int$Date),
+                               "var" = rowMeans(EU_curves_int[-which(colnames(EU_curves_int) %in% "Date")]),
+                               "country"="Mean")
+      # #depth data
+      filtr_depth_int <- to_plot_table_int[which(to_plot_table_int$country %in% names(cur_int)),]
+      # #Outliers data
+      filtr_outliers_int <- to_plot_table_int[which(to_plot_table_int$country %in% out2_int),]
+      # #CI data
+      filtr_CI_int <- data.frame("Date"=unique(to_plot_table_int$Date),
+                             "CI_lower" = ifelse(filtr_mean_int$var-1.96*sd_EU_int$SD<0,0,filtr_mean_int$var-1.96*sd_EU_int$SD),
+                             "CI_upper" = filtr_mean_int$var+1.96*sd_EU_int$SD,
+                             "country"="CI",
+                             var=2)
+      
+      
+      
+      
+      return(list("to_plot_table"=to_plot_table, "depth"=filtr_depth, "outliers"=filtr_outliers, "CI"=filtr_CI, "mean"=filtr_mean, "fPCA"=fit.fpca,
+                  "to_plot_table_int"=to_plot_table_int, "depth_int"=filtr_depth_int, "outliers_int"=filtr_outliers_int, "CI_int"=filtr_CI_int, "mean_int"=filtr_mean_int))
       
     })
     
     
-    
+    #plot of tab: "Functional data analysis" -> "Exploratory analysis and fPCA" 
+    output$plot_fda_explor_level <- renderPlotly({
+      # withProgress(message = 'Calculation in progress',
+      #              detail = 'This may take a while...', value = 0, {
+      #                for (i in 1:350) {
+      #                  incProgress(1/350)
+      #                  Sys.sleep(1)
+      #                }
+      #              })
+      explor_plot_fda(country_reactive_db_fda_explor(), input$outcome_fda_explor, "level")
+      
+    })
     
     #plot of tab: "Functional data analysis" -> "Exploratory analysis and fPCA" 
-    output$plot_fda_explor <- renderPlotly({
-      withProgress(message = 'Calculation in progress',
-                   detail = 'This may take a while...', value = 0, {
-                     for (i in 1:350) {
-                       incProgress(1/350)
-                       Sys.sleep(1)
-                     }
-                   })
-      explor_plot_fda(country_reactive_db_fda_explor(), input$outcome_fda_explor)
+    output$plot_fda_explor_int <- renderPlotly({
+      # withProgress(message = 'Calculation in progress',
+      #              detail = 'This may take a while...', value = 0, {
+      #                for (i in 1:350) {
+      #                  incProgress(1/350)
+      #                  Sys.sleep(1)
+      #                }
+      #              })
+      explor_plot_fda(country_reactive_db_fda_explor(), input$outcome_fda_explor, "int")
 
     })
     
@@ -748,15 +825,17 @@ shinyApp(
     
     
     
+    
+    
     #plot of tab: "Functional data analysis" -> "Exploratory analysis and fPCA" 
     output$plot_fda_panel_model <- renderPlotly({
-      withProgress(message = 'Calculation in progress',
-                   detail = 'This may take a while...', value = 0, {
-                     for (i in 1:250) {
-                       incProgress(1/250)
-                       Sys.sleep(1)
-                     }
-                   })
+      # withProgress(message = 'Calculation in progress',
+      #              detail = 'This may take a while...', value = 0, {
+      #                for (i in 1:250) {
+      #                  incProgress(1/250)
+      #                  Sys.sleep(1)
+      #                }
+      #              })
       panel_model_plot_fda(country_reactive_db_panel_model(), input$outcome_fda_panel_model)
     })
     

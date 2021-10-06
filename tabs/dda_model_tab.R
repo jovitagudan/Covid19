@@ -1,8 +1,11 @@
 dda_model_tab <- tabItem(
   tabName = "dda_model",
   
-  fluidRow(
-           h1("   Automatic parametric model"),
+  fluidRow(  h1(""),
+             h1(""),
+             h1(""),
+            span(tags$i(h3("")), style="color:#d2d5d6"),
+            span(tags$i(h1("Automatic parametric model")), style="color:#d2d5d6"),
            
            box(
              # selectInput("country2", "Select country or region:",  choices = countries_list),

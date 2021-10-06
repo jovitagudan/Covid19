@@ -39,38 +39,50 @@ fda_explor_tab <- tabItem(
                  ".irs-grid-pol:nth-of-type(n+18) {background:white}")
       
       
-    ),
-    
-    box(
-      plotlyOutput("plot_fda_explor", height = 500)
     )
     
   ),
   
   fluidRow(
     box(
+      span(tags$i(h3("Exploratory analysis for totals")), style="color:#d2d5d6"), 
+      plotlyOutput("plot_fda_explor_level", height = 500)
+    ),
+    box(
+      span(tags$i(h3("Exploratory analysis for intensity")), style="color:#d2d5d6"), 
+      plotlyOutput("plot_fda_explor_int", height = 500)
+    )
+  ),
+  
+  
+  fluidRow(
+    box(
+      span(tags$i(h3("fPCs")), style="color:#d2d5d6"), 
       plotlyOutput("plot_fda_fPCA_harm", height = 500)
     ),
     box(
+      span(tags$i(h3("First fPC")), style="color:#d2d5d6"), 
       plotlyOutput("plot_fda_fPCA_harmD1", height = 500)
     )
   ),
   
   fluidRow(
     box(
+      span(tags$i(h3("Second fPC")), style="color:#d2d5d6"), 
       plotlyOutput("plot_fda_fPCA_harmD2", height = 500)
     ),
     box(
+      span(tags$i(h3("Third fPC")), style="color:#d2d5d6"), 
       plotlyOutput("plot_fda_fPCA_harmD3", height = 500)
     )
   ),
   
   fluidRow(
-    column(width = 12,
-    box(
+    box(height=12, width =12,
+      span(tags$i(h3("fPC scores")), style="color:#d2d5d6"), 
       plotlyOutput("plot_fda_fPCA_scores", height = 600)
     )
-    )
+    
   )
   
   
